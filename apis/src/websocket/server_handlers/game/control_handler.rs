@@ -68,21 +68,17 @@ impl GameControlHandler {
             }))),
         });
 
-        // Only notify the opponent about a *pending* control.
-        if game.has_unanswered_game_control() {
-            match self.control {
-                GameControl::DrawOffer(_) | GameControl::TakebackRequest(_) => {
-                    let current_user =
-                        User::find_by_uuid(&game.current_player_id, &mut conn).await?;
-                    let games = current_user.get_games_with_notifications(&mut conn).await?;
-                    let game_responses = GameResponse::from_games_batch(games, &mut conn).await?;
-                    messages.push(InternalServerMessage {
-                        destination: MessageDestination::User(game.current_player_id),
-                        message: ServerMessage::Game(Box::new(GameUpdate::Urgent(game_responses))),
-                    });
-                }
-                _ => {}
+        match self.control {
+            GameControl::DrawOffer(_) | GameControl::TakebackRequest(_) => {
+                let current_user = User::find_by_uuid(&game.current_player_id, &mut conn).await?;
+                let games = current_user.get_games_with_notifications(&mut conn).await?;
+                let game_responses = GameResponse::from_games_batch(games, &mut conn).await?;
+                messages.push(InternalServerMessage {
+                    destination: MessageDestination::User(game.current_player_id),
+                    message: ServerMessage::Game(Box::new(GameUpdate::Urgent(game_responses))),
+                });
             }
+            _ => {}
         }
         if game_response.time_mode == TimeMode::RealTime {
             messages.push(InternalServerMessage {
