@@ -67,6 +67,7 @@ impl GameControlHandler {
                 username: self.username.to_owned(),
             }))),
         });
+
         match self.control {
             GameControl::DrawOffer(_) | GameControl::TakebackRequest(_) => {
                 let current_user = User::find_by_uuid(&game.current_player_id, &mut conn).await?;

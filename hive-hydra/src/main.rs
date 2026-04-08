@@ -21,6 +21,11 @@ struct BotGameTurn {
     token: String,
 }
 
+pub(crate) struct ActiveProcess {
+    game_id: String,
+    handle: tokio::task::JoinHandle<()>,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Initialize logging first
@@ -44,7 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let (sender, receiver) = mpsc::channel(config.queue_capacity);
     let receiver = Arc::new(Mutex::new(receiver));
     let semaphore = Arc::new(Semaphore::new(config.max_concurrent_processes));
-    let active_processes = Arc::new(Mutex::new(Vec::new()));
+    let active_processes: Arc<Mutex<Vec<ActiveProcess>>> = Arc::new(Mutex::new(Vec::new()));
     let turn_tracker = TurnTracker::new();
 
     info!(
