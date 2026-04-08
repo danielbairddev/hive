@@ -124,16 +124,19 @@ impl GameControlHandler {
     }
 
     async fn handle_takeback_request(&self, conn: &mut DbConn<'_>) -> Result<Game> {
-        Ok(self.game.write_game_control(&self.control, conn).await?)
+        let game = self.game.write_game_control(&self.control, conn).await?;
+        Ok(game)
     }
 
     async fn handle_takeback_accept(&self, conn: &mut DbConn<'_>) -> Result<Game> {
         self.ensure_previous_gc_present()?;
-        Ok(self.game.accept_takeback(&self.control, conn).await?)
+        let game = self.game.accept_takeback(&self.control, conn).await?;
+        Ok(game)
     }
 
     async fn handle_resign(&self, conn: &mut DbConn<'_>) -> Result<Game> {
-        Ok(self.game.resign(&self.control, conn).await?)
+        let game = self.game.resign(&self.control, conn).await?;
+        Ok(game)
     }
 
     async fn handle_abort(&self, conn: &mut DbConn<'_>) -> Result<()> {
@@ -145,21 +148,25 @@ impl GameControlHandler {
 
     async fn handle_draw_reject(&self, conn: &mut DbConn<'_>) -> Result<Game> {
         self.ensure_previous_gc_present()?;
-        Ok(self.game.write_game_control(&self.control, conn).await?)
+        let game = self.game.write_game_control(&self.control, conn).await?;
+        Ok(game)
     }
 
     async fn handle_draw_offer(&self, conn: &mut DbConn<'_>) -> Result<Game> {
-        Ok(self.game.write_game_control(&self.control, conn).await?)
+        let game = self.game.write_game_control(&self.control, conn).await?;
+        Ok(game)
     }
 
     async fn handle_draw_accept(&self, conn: &mut DbConn<'_>) -> Result<Game> {
         self.ensure_previous_gc_present()?;
-        Ok(self.game.accept_draw(&self.control, conn).await?)
+        let game = self.game.accept_draw(&self.control, conn).await?;
+        Ok(game)
     }
 
     async fn handle_takeback_reject(&self, conn: &mut DbConn<'_>) -> Result<Game> {
         self.ensure_previous_gc_present()?;
-        Ok(self.game.write_game_control(&self.control, conn).await?)
+        let game = self.game.write_game_control(&self.control, conn).await?;
+        Ok(game)
     }
 
     async fn match_control(&self, conn: &mut DbConn<'_>) -> Result<Game> {
