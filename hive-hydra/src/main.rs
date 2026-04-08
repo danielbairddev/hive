@@ -1,5 +1,5 @@
 use hivegame_bot_api::HiveGame;
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 use tokio::sync::{mpsc, Mutex, Semaphore};
 use tracing::{debug, error, info};
 
@@ -19,6 +19,11 @@ struct BotGameTurn {
     hash: u64,
     bot: BotConfig,
     token: String,
+}
+
+pub(crate) struct ActiveProcess {
+    game_id: String,
+    handle: tokio::task::JoinHandle<()>,
 }
 
 #[tokio::main]
@@ -44,7 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let (sender, receiver) = mpsc::channel(config.queue_capacity);
     let receiver = Arc::new(Mutex::new(receiver));
     let semaphore = Arc::new(Semaphore::new(config.max_concurrent_processes));
-    let active_processes = Arc::new(Mutex::new(HashMap::new()));
+    let active_processes: Arc<Mutex<Vec<ActiveProcess>>> = Arc::new(Mutex::new(Vec::new()));
     let turn_tracker = TurnTracker::new();
 
     info!(
