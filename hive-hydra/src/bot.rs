@@ -2,6 +2,7 @@ use crate::{
     config::BotConfig,
     hivegame_bot_api::HiveGameApi,
     turn_tracker::{TurnTracker, TurnTracking},
+    ActiveProcess,
     BotGameTurn,
 };
 use std::{
@@ -14,6 +15,13 @@ use tracing::{debug, error, info};
 // Constants for token and login management
 const LOGIN_RETRY_INTERVAL_SECS: u64 = 10;
 const TOKEN_REFRESH_INTERVAL_SECS: u64 = 3600; // Refresh token every 60 minutes
+
+fn has_pending_takeback_request(game_control_history: &str) -> bool {
+    game_control_history
+        .split_terminator(';')
+        .next_back()
+        .is_some_and(|entry| entry.contains("TakebackRequest("))
+}
 
 async fn auth(api: &HiveGameApi, bot: &BotConfig) -> String {
     // Authenticate to get token with retry logic
@@ -96,6 +104,30 @@ pub async fn producer_task(
                     bot.name
                 );
                 for game in game_strings {
+                    // If there's a pending takeback request, auto-accept immediately.
+                    // These "pending" games are fetched from the server's notifications list,
+                    // so a takeback request here is directed at the bot.
+                    if has_pending_takeback_request(&game.game_control_history) {
+                        let game_identifier = match &game.nanoid {
+                            Some(id) => id.clone(),
+                            None => game.game_id.clone(),
+                        };
+                        match api
+                            .control_game(&game_identifier, "takeback_accept", &token)
+                            .await
+                        {
+                            Ok(()) => debug!(
+                                "Auto-accepted takeback for game {} (bot {})",
+                                game_identifier, bot.name
+                            ),
+                            Err(e) => error!(
+                                "Failed to auto-accept takeback for game {} (bot {}): {}",
+                                game_identifier, bot.name, e
+                            ),
+                        }
+                        continue;
+                    }
+
                     let hash = game.hash();
 
                     if turn_tracker.tracked(hash).await {
@@ -130,7 +162,7 @@ pub async fn producer_task(
 pub async fn consumer_task(
     receiver: Arc<Mutex<mpsc::Receiver<BotGameTurn>>>,
     semaphore: Arc<Semaphore>,
-    active_processes: Arc<Mutex<Vec<tokio::task::JoinHandle<()>>>>,
+    active_processes: Arc<Mutex<Vec<ActiveProcess>>>,
     turn_tracker: TurnTracker,
     api: Arc<HiveGameApi>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -143,6 +175,24 @@ pub async fn consumer_task(
             debug!("Received turn for bot {}", turn.bot.name);
 
             let api_clone = api.clone();
+
+            // Prefer nanoid (web UI game id), fall back to numeric game id.
+            let game_identifier = match &turn.game.nanoid {
+                Some(id) => id.clone(),
+                None => turn.game.game_id.clone(),
+            };
+
+            // If we're already thinking about this game (e.g. a takeback happened),
+            // abort the previous task and replace it with a fresh computation.
+            {
+                let mut processes = active_processes.lock().await;
+                if let Some(index) = processes.iter().position(|p| p.game_id == game_identifier) {
+                    let previous = processes.swap_remove(index);
+                    previous.handle.abort();
+                    debug!("Aborted previous processing for game {}", game_identifier);
+                }
+            }
+
             let handle = tokio::spawn(process_turn(
                 turn,
                 semaphore.clone(),
@@ -150,7 +200,10 @@ pub async fn consumer_task(
                 api_clone,
             ));
 
-            active_processes.lock().await.push(handle);
+            active_processes.lock().await.push(ActiveProcess {
+                game_id: game_identifier,
+                handle,
+            });
             cleanup_processes(active_processes.clone()).await;
         }
     }
@@ -244,10 +297,10 @@ async fn process_turn(
     );
 }
 
-pub async fn cleanup_processes(active_processes: Arc<Mutex<Vec<tokio::task::JoinHandle<()>>>>) {
+pub async fn cleanup_processes(active_processes: Arc<Mutex<Vec<ActiveProcess>>>) {
     let mut processes = active_processes.lock().await;
     let initial_count = processes.len();
-    processes.retain(|handle| !handle.is_finished());
+    processes.retain(|p| !p.handle.is_finished());
     let removed = initial_count - processes.len();
     if removed > 0 {
         debug!("Cleaned up {} finished processes", removed);
