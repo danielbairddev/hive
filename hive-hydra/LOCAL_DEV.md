@@ -16,8 +16,7 @@ gameplay and the takeback feature end-to-end.
 
 ## 1. Start the web app and database
 
-From **`/Users/danielbaird/aifolder/hive`** (the main hive repo, or any
-worktree that contains `docker-compose.yml`):
+From the repo root (any worktree that contains `docker-compose.yml`):
 
 ```sh
 docker compose up postgres app
@@ -110,7 +109,7 @@ Expected output:
 From the nokamute source directory:
 
 ```sh
-cd /Users/danielbaird/aifolder/nokamute   # adjust path if needed
+cd /path/to/nokamute
 cargo build --release
 ```
 
@@ -128,19 +127,19 @@ base_url: "http://localhost:3000"
 
 bots:
   - name: nokamute-easy
-    ai_command: /Users/danielbaird/aifolder/nokamute/target/release/nokamute uhp --num-threads=1
+    ai_command: /path/to/nokamute uhp --num-threads=1
     bestmove_command_args: depth 2
     email: nokamute-easy@example.com
     password: nokamute-easy
 
   - name: nokamute-medium
-    ai_command: /Users/danielbaird/aifolder/nokamute/target/release/nokamute uhp --num-threads=1
+    ai_command: /path/to/nokamute uhp --num-threads=1
     bestmove_command_args: depth 4
     email: nokamute-medium@example.com
     password: nokamute-medium
 
   - name: nokamute-hard
-    ai_command: /Users/danielbaird/aifolder/nokamute/target/release/nokamute uhp --num-threads=2
+    ai_command: /path/to/nokamute uhp --num-threads=2
     bestmove_command_args: depth 7
     email: nokamute-hard@example.com
     password: nokamute-hard
