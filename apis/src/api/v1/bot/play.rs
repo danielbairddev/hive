@@ -240,7 +240,7 @@ async fn handle_control(
                         game_copy
                     }
                     GameControl::TakebackAccept(_) => {
-                        game.accept_takeback(&game_control, tc).await?
+                        game.accept_takeback(&game_control, true, tc).await?
                     }
                     GameControl::TakebackReject(_) => {
                         game.write_game_control(&game_control, tc).await?

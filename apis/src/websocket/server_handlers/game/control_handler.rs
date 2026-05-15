@@ -186,7 +186,7 @@ impl GameControlHandler {
 
     async fn handle_takeback_accept(&self, conn: &mut DbConn<'_>) -> Result<Game> {
         self.ensure_previous_gc_present()?;
-        let game = self.game.accept_takeback(&self.control, conn).await?;
+        let game = self.game.accept_takeback(&self.control, false, conn).await?;
         Ok(game)
     }
 

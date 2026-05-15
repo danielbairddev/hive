@@ -863,6 +863,7 @@ impl Game {
     pub async fn accept_takeback(
         &self,
         game_control: &GameControl,
+        lichess_style: bool,
         conn: &mut DbConn<'_>,
     ) -> Result<Game, DbError> {
         let game_control_string = format!("{}. {game_control};", self.turn);
@@ -870,15 +871,14 @@ impl Game {
         let mut popped = 0_i32;
         let mut new_move_times = self.move_times.clone();
 
-        // game_control is TakebackAccept(accepter_color); the requester used the opposite color.
-        // If it's currently the requester's turn, the accepter already played a response move
-        // that also needs to be undone — pop both moves so the requester can choose differently.
-        let requester_id = match game_control.color().opposite_color() {
-            Color::White => self.white_id,
-            Color::Black => self.black_id,
-        };
-        let target_pops = if self.current_player_id == requester_id {
-            2
+        // In lichess_style (bot games): if it's the requester's turn the bot already played a
+        // response move that also needs undoing, so pop both. In human games always pop once.
+        let target_pops = if lichess_style {
+            let requester_id = match game_control.color().opposite_color() {
+                Color::White => self.white_id,
+                Color::Black => self.black_id,
+            };
+            if self.current_player_id == requester_id { 2 } else { 1 }
         } else {
             1
         };
