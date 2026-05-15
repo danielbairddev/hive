@@ -194,6 +194,22 @@ async fn handle_control(
             }
             GameControl::Abort(bot_color)
         }
+        "takeback_accept" => {
+            let opposite_color = bot_color.opposite_color();
+            match game.last_game_control() {
+                Some(GameControl::TakebackRequest(c)) if c == opposite_color => {}
+                _ => return Err(anyhow!("No pending takeback request to accept")),
+            }
+            GameControl::TakebackAccept(bot_color)
+        }
+        "takeback_reject" => {
+            let opposite_color = bot_color.opposite_color();
+            match game.last_game_control() {
+                Some(GameControl::TakebackRequest(c)) if c == opposite_color => {}
+                _ => return Err(anyhow!("No pending takeback request to reject")),
+            }
+            GameControl::TakebackReject(bot_color)
+        }
         _ => return Err(anyhow!("Invalid control type: {}", req.control)),
     };
 
@@ -222,6 +238,12 @@ async fn handle_control(
                         let mut game_copy = game.clone();
                         game_copy.finished = true;
                         game_copy
+                    }
+                    GameControl::TakebackAccept(_) => {
+                        game.accept_takeback(&game_control, tc).await?
+                    }
+                    GameControl::TakebackReject(_) => {
+                        game.write_game_control(&game_control, tc).await?
                     }
                     _ => unreachable!(),
                 };

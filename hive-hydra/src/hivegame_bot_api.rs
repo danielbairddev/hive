@@ -46,6 +46,22 @@ pub struct HiveGame {
     pub white_id: String,
     #[serde(default)]
     pub current_player_id: String,
+    #[serde(default)]
+    pub rated: bool,
+    #[serde(default)]
+    pub game_control_history: String,
+}
+
+impl HiveGame {
+    /// Returns true if there is a pending TakebackRequest in the game control history
+    /// that the bot needs to respond to.
+    pub fn has_pending_takeback_request(&self) -> bool {
+        self.game_control_history
+            .split_terminator(';')
+            .next_back()
+            .and_then(|entry| entry.split(' ').next_back())
+            .is_some_and(|gc| gc.starts_with("TakebackRequest("))
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -270,6 +286,43 @@ impl HiveGameApi {
         debug!("Challenges received: {:?}", challenge_ids);
 
         Ok(challenge_ids)
+    }
+
+    /// Respond to a pending takeback request.
+    /// Sends `takeback_accept` for unrated games and `takeback_reject` for rated games.
+    pub async fn respond_to_takeback(
+        &self,
+        game_id: &str,
+        accept: bool,
+        token: &str,
+    ) -> Result<(), ApiError> {
+        let url = format!("{}/api/v1/bot/games/control", self.base_url);
+        let control = if accept { "takeback_accept" } else { "takeback_reject" };
+
+        #[derive(Serialize)]
+        struct ControlRequest<'a> {
+            game_id: &'a str,
+            control: &'a str,
+        }
+
+        let payload = ControlRequest { game_id, control };
+        let response = self
+            .client
+            .post(&url)
+            .header("Authorization", format!("Bearer {token}"))
+            .json(&payload)
+            .send()
+            .await?;
+
+        let status = response.status();
+        if !status.is_success() {
+            return Err(ApiError::Server {
+                status_code: status,
+                message: response.text().await.unwrap_or_default(),
+            });
+        }
+
+        Ok(())
     }
 
     /// Accept a challenge for a bot
@@ -508,6 +561,8 @@ mod tests {
             black_id: "".to_string(),
             white_id: "".to_string(),
             current_player_id: "".to_string(),
+            rated: false,
+            game_control_history: "".to_string(),
         };
 
         let expected = "Base;InProgress;White[3];wS1;bG1 -wS1;wA1 wS1/;bG2 /bG1";

@@ -103,6 +103,30 @@ pub async fn producer_task(
                         continue;
                     }
 
+                    if game.has_pending_takeback_request() {
+                        let game_id = game.nanoid.as_deref().unwrap_or(&game.game_id);
+                        let accept = !game.rated;
+                        info!(
+                            "Bot {} responding to takeback request in game {} (rated={}, accept={})",
+                            bot.name, game_id, game.rated, accept
+                        );
+                        turn_tracker.processing(hash).await;
+                        match api.respond_to_takeback(game_id, accept, &token).await {
+                            Ok(_) => info!(
+                                "Bot {} {} takeback in game {}",
+                                bot.name,
+                                if accept { "accepted" } else { "rejected" },
+                                game_id
+                            ),
+                            Err(e) => error!(
+                                "Bot {} failed to respond to takeback in game {}: {}",
+                                bot.name, game_id, e
+                            ),
+                        }
+                        turn_tracker.processed(hash).await;
+                        continue;
+                    }
+
                     let turn = BotGameTurn {
                         game,
                         hash,
