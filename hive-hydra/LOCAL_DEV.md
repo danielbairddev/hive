@@ -104,7 +104,7 @@ Expected output:
 
 ---
 
-## 3. Build nokamute
+## 3. Build nokamute and put it on your PATH
 
 From the nokamute source directory:
 
@@ -113,37 +113,24 @@ cd /path/to/nokamute
 cargo build --release
 ```
 
-The binary will be at `target/release/nokamute`.
+Then symlink the binary into `~/.cargo/bin` (which is already on your PATH if
+you use rustup):
+
+```sh
+ln -sf "$(pwd)/target/release/nokamute" ~/.cargo/bin/nokamute
+nokamute --version  # should print the version
+```
+
+The symlink means future `cargo build --release` runs in the nokamute repo
+automatically update the binary without relinking.
 
 ---
 
 ## 4. Configure hive-hydra
 
-Edit `hive-hydra/hive-hydra.yaml` and ensure the `ai_command` lines point at
-the full path to the nokamute binary you just built:
-
-```yaml
-base_url: "http://localhost:3000"
-
-bots:
-  - name: nokamute-easy
-    ai_command: /path/to/nokamute uhp --num-threads=1
-    bestmove_command_args: depth 2
-    email: nokamute-easy@example.com
-    password: nokamute-easy
-
-  - name: nokamute-medium
-    ai_command: /path/to/nokamute uhp --num-threads=1
-    bestmove_command_args: depth 4
-    email: nokamute-medium@example.com
-    password: nokamute-medium
-
-  - name: nokamute-hard
-    ai_command: /path/to/nokamute uhp --num-threads=2
-    bestmove_command_args: depth 7
-    email: nokamute-hard@example.com
-    password: nokamute-hard
-```
+`hive-hydra/hive-hydra.yaml` ships with `ai_command: nokamute uhp ...` which
+works as-is if nokamute is on your PATH (step 3 above). You only need to edit
+the file if you want to use a non-PATH binary or a different engine.
 
 > **Passwords** — avoid putting plain-text passwords in YAML. Use environment
 > variables instead (hive-hydra reads `HIVE_HYDRA_BOT_{NAME}_PASSWORD`):
@@ -158,20 +145,24 @@ bots:
 
 ## 5. Run hive-hydra
 
-Build hive-hydra (from the repo root):
+The easiest way is the convenience script (run from the repo root):
+
+```sh
+./hive-hydra/restart-dev-stack.sh
+```
+
+This kills any running hive-hydra, rebuilds from source, and starts it with
+the default config. Pass `--full` to also restart the Docker app container:
+
+```sh
+./hive-hydra/restart-dev-stack.sh --full
+```
+
+Or manually (from the repo root):
 
 ```sh
 cargo build --release -p hive-hydra
-```
-
-Then run it (from the repo root or worktree):
-
-```sh
-HIVE_HYDRA_BOT_NOKAMUTE_EASY_PASSWORD=nokamute-easy \
-HIVE_HYDRA_BOT_NOKAMUTE_MEDIUM_PASSWORD=nokamute-medium \
-HIVE_HYDRA_BOT_NOKAMUTE_HARD_PASSWORD=nokamute-hard \
-  .cargo/target/release/hive-hydra \
-  --config hive-hydra/hive-hydra.yaml
+.cargo/target/release/hive-hydra --config hive-hydra/hive-hydra.yaml
 ```
 
 You should see all three bots authenticate successfully:
