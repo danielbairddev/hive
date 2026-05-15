@@ -935,7 +935,7 @@ impl Game {
             .set((
                 current_player_id.eq(next_player),
                 history.eq(new_history),
-                turn.eq(turn - popped),
+                turn.eq(self.turn - popped),
                 game_status.eq(new_game_status),
                 game_control_history.eq(game_control_history.concat(game_control_string)),
                 updated_at.eq(Utc::now()),

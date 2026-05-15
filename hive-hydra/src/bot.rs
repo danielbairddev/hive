@@ -228,8 +228,9 @@ async fn process_turn(
             info!("Bot '{}' bestmove: '{}'", turn.bot.name, bestmove);
 
             // Re-fetch game state before submitting: a takeback may have been requested
-            // while the AI was computing. If we submit a move with a pending takeback the
-            // server silently auto-rejects it, which is the wrong behaviour.
+            // while the AI was computing. If so, discard the computed move and let the
+            // producer's next poll handle the takeback — this avoids a race where both
+            // process_turn and the producer respond to the same takeback request.
             let takeback_pending = match api.get_games(&turn.token).await {
                 Ok(current_games) => current_games
                     .iter()
@@ -248,23 +249,10 @@ async fn process_turn(
             };
 
             if takeback_pending {
-                let accept = !turn.game.rated;
                 info!(
-                    "Bot '{}' detected takeback request in game {} during AI computation (rated={}, accept={})",
-                    turn.bot.name, game_identifier, turn.game.rated, accept
+                    "Bot '{}' detected takeback request in game {} during AI computation, discarding move — producer will handle it",
+                    turn.bot.name, game_identifier
                 );
-                match api.respond_to_takeback(&game_identifier, accept, &turn.token).await {
-                    Ok(_) => info!(
-                        "Bot '{}' {} takeback in game {} (post-computation)",
-                        turn.bot.name,
-                        if accept { "accepted" } else { "rejected" },
-                        game_identifier
-                    ),
-                    Err(e) => error!(
-                        "Bot '{}' failed to respond to takeback in game {}: {}",
-                        turn.bot.name, game_identifier, e
-                    ),
-                }
             } else {
                 match api
                     .play_move(&game_identifier, &bestmove, &turn.token)
