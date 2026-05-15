@@ -218,42 +218,74 @@ async fn process_turn(
     // Convert game to string using the HiveGame method
     let game_string = turn.game.game_string();
 
+    let game_identifier = match &turn.game.nanoid {
+        Some(id) => id.clone(),
+        None => turn.game.game_id.clone(),
+    };
+
     match crate::ai::run_commands(child, &game_string, &turn.bot.bestmove_command_args).await {
         Ok(bestmove) => {
             info!("Bot '{}' bestmove: '{}'", turn.bot.name, bestmove);
 
-            // Determine the game identifier to use (prefer nanoid, fall back to game_id)
-            let game_identifier = match &turn.game.nanoid {
-                Some(id) => id.clone(),
-                None => turn.game.game_id.clone(),
-            };
-
-            // Send the move to the server using the token
-            match api
-                .play_move(&game_identifier, &bestmove, &turn.token)
-                .await
-            {
-                Ok(_) => {
-                    info!(
-                        "Move '{}' sent successfully for game {}",
-                        bestmove, game_identifier
-                    );
-                }
+            // Re-fetch game state before submitting: a takeback may have been requested
+            // while the AI was computing. If we submit a move with a pending takeback the
+            // server silently auto-rejects it, which is the wrong behaviour.
+            let takeback_pending = match api.get_games(&turn.token).await {
+                Ok(current_games) => current_games
+                    .iter()
+                    .find(|g| {
+                        g.nanoid.as_deref() == Some(game_identifier.as_str())
+                            || g.game_id == game_identifier
+                    })
+                    .is_some_and(|g| g.has_pending_takeback_request()),
                 Err(e) => {
                     error!(
-                        "Failed to send move for bot '{}' on game {}: '{}'",
+                        "Bot '{}' could not re-fetch game {} before move, proceeding anyway: {}",
                         turn.bot.name, game_identifier, e
                     );
+                    false
+                }
+            };
+
+            if takeback_pending {
+                let accept = !turn.game.rated;
+                info!(
+                    "Bot '{}' detected takeback request in game {} during AI computation (rated={}, accept={})",
+                    turn.bot.name, game_identifier, turn.game.rated, accept
+                );
+                match api.respond_to_takeback(&game_identifier, accept, &turn.token).await {
+                    Ok(_) => info!(
+                        "Bot '{}' {} takeback in game {} (post-computation)",
+                        turn.bot.name,
+                        if accept { "accepted" } else { "rejected" },
+                        game_identifier
+                    ),
+                    Err(e) => error!(
+                        "Bot '{}' failed to respond to takeback in game {}: {}",
+                        turn.bot.name, game_identifier, e
+                    ),
+                }
+            } else {
+                match api
+                    .play_move(&game_identifier, &bestmove, &turn.token)
+                    .await
+                {
+                    Ok(_) => {
+                        info!(
+                            "Move '{}' sent successfully for game {}",
+                            bestmove, game_identifier
+                        );
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to send move for bot '{}' on game {}: '{}'",
+                            turn.bot.name, game_identifier, e
+                        );
+                    }
                 }
             }
         }
         Err(e) => {
-            // Determine the game identifier to use (prefer nanoid, fall back to game_id)
-            let game_identifier = match &turn.game.nanoid {
-                Some(id) => id.clone(),
-                None => turn.game.game_id.clone(),
-            };
-
             error!(
                 "Error running AI commands for bot '{}' on game {}: '{}'",
                 turn.bot.name, game_identifier, e
