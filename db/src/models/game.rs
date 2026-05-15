@@ -870,13 +870,34 @@ impl Game {
         let mut popped = 0_i32;
         let mut new_move_times = self.move_times.clone();
 
-        if let Some(a_move) = moves.pop() {
-            new_move_times.pop();
-            popped += 1;
-            if a_move.trim() == "pass" {
-                moves.pop();
+        // game_control is TakebackAccept(accepter_color); the requester used the opposite color.
+        // If it's currently the requester's turn, the accepter already played a response move
+        // that also needs to be undone — pop both moves so the requester can choose differently.
+        let requester_id = match game_control.color().opposite_color() {
+            Color::White => self.white_id,
+            Color::Black => self.black_id,
+        };
+        let target_pops = if self.current_player_id == requester_id {
+            2
+        } else {
+            1
+        };
+
+        let mut remaining = target_pops;
+        while remaining > 0 {
+            if let Some(a_move) = moves.pop() {
                 new_move_times.pop();
                 popped += 1;
+                remaining -= 1;
+                // If the final move to pop is a pass, pop one extra so we don't
+                // strand the game in a state where the player still cannot move.
+                if remaining == 0 && a_move.trim() == "pass" && !moves.is_empty() {
+                    moves.pop();
+                    new_move_times.pop();
+                    popped += 1;
+                }
+            } else {
+                break;
             }
         }
 
@@ -902,7 +923,9 @@ impl Game {
             error: e.to_string(),
         })?;
         let new_game_status = state.game_status.to_string();
-        let next_player = if self.current_player_id == self.black_id {
+        // Derive next player from the rebuilt state rather than toggling, so we
+        // handle both the 1-pop and 2-pop cases correctly.
+        let next_player = if state.turn.is_multiple_of(2) {
             self.white_id
         } else {
             self.black_id

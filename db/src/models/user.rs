@@ -3,7 +3,16 @@ use crate::{
     db_error::DbError,
     models::{Game, GameUser, NewRating},
     schema::{
-        games::{self, current_player_id, finished, game_status, tournament_id},
+        games::{
+            self,
+            black_id,
+            current_player_id,
+            finished,
+            game_control_history,
+            game_status,
+            tournament_id,
+            white_id,
+        },
         ratings::{self, rating},
         users::{
             self,
@@ -25,6 +34,7 @@ use diesel::{
     query_dsl::BelongingToDsl,
     select,
     BoolExpressionMethods,
+    TextExpressionMethods,
     ExpressionMethods,
     Identifiable,
     Insertable,
@@ -294,7 +304,21 @@ impl User {
         Ok(GameUser::belonging_to(self)
             .inner_join(games::table)
             .select(Game::as_select())
-            .filter(current_player_id.eq(self.id))
+            .filter(
+                // Normal case: it is this player's turn to move.
+                current_player_id.eq(self.id)
+                    // Scenario 2 takeback: the opponent just requested a takeback
+                    // while it is currently this player's turn (i.e. this player
+                    // already responded to the human's move, so both moves need
+                    // undoing). The LIKE pattern matches only when TakebackRequest
+                    // is the final entry in game_control_history.
+                    .or(white_id
+                        .eq(self.id)
+                        .and(game_control_history.like("%TakebackRequest(b);")))
+                    .or(black_id
+                        .eq(self.id)
+                        .and(game_control_history.like("%TakebackRequest(w);"))),
+            )
             .filter(finished.eq(false))
             .filter(
                 tournament_id
